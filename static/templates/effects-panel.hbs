@@ -34,7 +34,7 @@
                  style="background-color: {{effect.tint.css}}; background-image: url('{{effect.img}}'); mask-image: url('{{effect.img}}'); -webkit-mask-image: url('{{effect.img}}'); height: {{iconSize}}px; width: {{iconSize}}px;">
             </div>
             {{#if showDurationOverlays}}
-                {{#if effect.isExpired}}
+                {{#if effect.duration.expired}}
                     <i class="expired badge fas fa-clock" style="font-size: {{badgeSize}}px;"></i>
                 {{else if effect.isTemporary}}
                     <i class="badge fas fa-clock" style="font-size: {{badgeSize}}px;"></i>

@@ -10,10 +10,8 @@ import { Settings } from "../settings.ts";
 import {
     MODULE_ID,
     RIGHT_CLICK_BEHAVIOR,
-    SECONDS,
     USER_FLAGS,
 } from "../constants.ts";
-import { EffectDurationData } from "@common/documents/active-effect.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } =
     foundry.applications.api;
@@ -36,7 +34,6 @@ type SceneActor = Actor<TokenDocument<Scene> | null> | null;
 
 interface EffectData extends ActiveEffect<SceneActor | Actor<null> | Item<null>> {
     timeLabel: string;
-    isExpired: boolean;
     infinite: boolean;
     src: string | null;
     parentDescription: string | null;
@@ -399,7 +396,7 @@ class EffectsPanelAppV2 extends HandlebarsApplicationMixin(ApplicationV2) {
         }
 
         if (rightClickBehavior === RIGHT_CLICK_BEHAVIOR.DIALOG) {
-            const content = game.i18n.format(
+            const content = game.i18n.localize(
                 "EffectsPanel.DeleteOrDisableEffectContent",
                 {
                     effect: effect.name,
@@ -483,10 +480,8 @@ class EffectsPanelAppV2 extends HandlebarsApplicationMixin(ApplicationV2) {
                     { keepId: true },
                 ) as EffectData;
 
-                effectData.infinite = effect.type === "none";
+                effectData.infinite = effect.duration.value === Infinity;
                 effectData.timeLabel = this.#determineTimeLabel(effect);
-                effectData.isExpired = this.#determineIfIsExpired(effect);
-
                 effectData.src = src;
 
                 return effectData;
@@ -531,108 +526,19 @@ class EffectsPanelAppV2 extends HandlebarsApplicationMixin(ApplicationV2) {
         }
     }
 
-    #determineIfIsExpired(
-        effect: ActiveEffect<SceneActor | Actor<null>>,
-    ): boolean {
-        const durationType = effect.duration.type;
-
-        if (durationType === "seconds") {
-            const remainingSeconds =
-                this.#getSecondsRemaining(effect.duration) ?? 0;
-            return remainingSeconds <= 0;
-        } else if (durationType === "turns") {
-            const remainingRounds =
-                this.#getRoundsRemaining(effect.duration) ?? 0;
-            const remainingTurns =
-                this.#getTurnsRemaining(effect.duration) ?? 0;
-            return (
-                remainingRounds < 0 ||
-                (remainingRounds === 0 && remainingTurns <= 0)
-            );
-        }
-
-        return false;
-    }
-
     #determineTimeLabel(
         effect: ActiveEffect<SceneActor | Actor<null>>,
     ): string {
-        const durationType = effect.duration.type;
-
         if (game.system.id === "demonlord") {
             const dlResult = this.#handleDemonLordRemainingTime(effect);
             if (dlResult) return dlResult;
         }
 
-        if (durationType === "seconds") {
-            const remainingSeconds =
-                this.#getSecondsRemaining(effect.duration) ?? 0;
-            if (remainingSeconds <= 0) {
-                return game.i18n.localize("EffectsPanel.Expired");
-            } else if (remainingSeconds >= SECONDS.IN_TWO_YEARS) {
-                return game.i18n.format("EffectsPanel.ManyYears", {
-                    years: Math.floor(remainingSeconds / SECONDS.IN_ONE_YEAR),
-                });
-            } else if (remainingSeconds >= SECONDS.IN_ONE_YEAR) {
-                return game.i18n.localize("EffectsPanel.OneYear");
-            } else if (remainingSeconds >= SECONDS.IN_TWO_WEEKS) {
-                return game.i18n.format("EffectsPanel.ManyWeeks", {
-                    weeks: Math.floor(remainingSeconds / SECONDS.IN_ONE_WEEK),
-                });
-            } else if (remainingSeconds > SECONDS.IN_ONE_WEEK) {
-                return game.i18n.localize("EffectsPanel.OneWeek");
-            } else if (remainingSeconds >= SECONDS.IN_TWO_DAYS) {
-                return game.i18n.format("EffectsPanel.ManyDays", {
-                    days: Math.floor(remainingSeconds / SECONDS.IN_ONE_DAY),
-                });
-            } else if (remainingSeconds > SECONDS.IN_TWO_HOURS) {
-                return game.i18n.format("EffectsPanel.ManyHours", {
-                    hours: Math.floor(remainingSeconds / SECONDS.IN_ONE_HOUR),
-                });
-            } else if (remainingSeconds > SECONDS.IN_TWO_MINUTES) {
-                return game.i18n.format("EffectsPanel.ManyMinutes", {
-                    minutes: Math.floor(
-                        remainingSeconds / SECONDS.IN_ONE_MINUTE,
-                    ),
-                });
-            } else if (remainingSeconds >= 2) {
-                return game.i18n.format("EffectsPanel.ManySeconds", {
-                    seconds: remainingSeconds,
-                });
-            } else if (remainingSeconds === 1) {
-                return game.i18n.localize("EffectsPanel.OneSecond");
-            }
-        } else if (durationType === "turns") {
-            const remainingRounds =
-                this.#getRoundsRemaining(effect.duration) ?? 0;
-            const remainingTurns =
-                this.#getTurnsRemaining(effect.duration) ?? 0;
-
-            if (
-                remainingRounds < 0 ||
-                (remainingRounds === 0 && remainingTurns <= 0)
-            ) {
-                return game.i18n.localize("EffectsPanel.Expired");
-            } else if (remainingRounds > 0) {
-                return game.i18n.format(
-                    remainingRounds === 1
-                        ? "EffectsPanel.OneRound"
-                        : "EffectsPanel.ManyRounds",
-                    { rounds: remainingRounds },
-                );
-            } else if (remainingTurns > 0) {
-                return game.i18n.format(
-                    remainingTurns === 1
-                        ? "EffectsPanel.OneTurn"
-                        : "EffectsPanel.ManyTurns",
-                    { turns: remainingTurns },
-                );
-            }
-        } else if (durationType === "none") {
+        if (effect.duration.value === Infinity) {
             return game.i18n.localize("EffectsPanel.Unlimited");
         }
 
-        return "";
+        return effect.duration.label ?? `${effect.duration.value} ${effect.duration.units}`;
     }
 
     #handleDemonLordRemainingTime(
@@ -645,7 +551,7 @@ class EffectsPanelAppV2 extends HandlebarsApplicationMixin(ApplicationV2) {
         ) as string | undefined;
         if (specialDuration !== "None" && specialDuration !== undefined) {
             tokenName = fromUuidSync(
-                effect.origin?.substr(0, effect.origin.search(".Actor.")) ?? "",
+                effect.origin?.substring(0, effect.origin.search(".Actor.")) ?? "",
             )?.name;
             switch (specialDuration) {
                 case "EndOfTheRound":
@@ -686,33 +592,6 @@ class EffectsPanelAppV2 extends HandlebarsApplicationMixin(ApplicationV2) {
         }
 
         return null;
-    }
-
-    #getSecondsRemaining(duration: EffectDurationData): number | null {
-        if (duration.seconds === null) return null;
-
-        const currentTime = game.time.worldTime;
-        const endTime = (duration.startTime || 0) + duration.seconds;
-
-        return endTime - currentTime;
-    }
-
-    #getRoundsRemaining(duration: EffectDurationData): number | null {
-        if (duration.rounds === null) return null;
-
-        const currentRound = game.combat?.round ?? 0;
-        const endingRound = (duration.startRound || 0) + duration.rounds;
-
-        return endingRound - currentRound;
-    }
-
-    #getTurnsRemaining(duration: EffectDurationData): number | null {
-        if (duration.turns === null) return null;
-
-        const currentTurn = game.combat?.turn ?? 0;
-        const endingTurn = (duration.startTurn || 0) + duration.turns;
-
-        return endingTurn - currentTurn;
     }
 }
 
