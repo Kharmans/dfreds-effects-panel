@@ -6,6 +6,7 @@ import { Setup } from "./setup.ts";
 import { ControlToken } from "./controlToken.ts";
 import { CrudActiveEffects } from "./crudActiveEffects.ts";
 import { RefreshToken } from "./refreshToken.ts";
+import { UpdateWorldTime } from "./updateWorldTime.ts";
 
 interface Listener {
     listen(): void;
@@ -22,6 +23,7 @@ const HooksEffectsPanel: Listener = {
             ControlToken,
             RefreshToken,
             CrudActiveEffects,
+            UpdateWorldTime,
         ];
 
         for (const listener of listeners) {
